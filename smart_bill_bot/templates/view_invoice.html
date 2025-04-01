@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Invoice Viewer</title>
+    <style>
+        .container { display: flex; gap: 20px; }
+        .left, .right {
+            flex: 1; padding: 20px; border: 1px solid #ddd;
+            height: 90vh; overflow-y: scroll;
+        }
+    </style>
+</head>
+<body>
+<h2>🧾 Extracted Invoice Details</h2>
+<div class="container">
+    <div class="left">
+        <h4>Invoice Preview</h4>
+        <embed src="{{ url_for('static', filename='../uploads/' ~ filename) }}" type="application/pdf" width="100%" height="100%">
+    </div>
+    <div class="right">
+        <ul>
+            <li><strong>Vendor:</strong> {{ data.vendor }}</li>
+            <li><strong>Invoice #:</strong> {{ data.invoice_number }}</li>
+            <li><strong>Date:</strong> {{ data.date }}</li>
+            <li><strong>Amount:</strong> {{ data.amount }}</li>
+            <li><strong>Address:</strong> {{ data.vendor_address }}</li>
+        </ul>
+    </div>
+</div>
+<a href="{{ url_for('file_list') }}">← Back to Files</a>
+</body>
+</html>

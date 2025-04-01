@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Uploaded Invoices</title>
+</head>
+<body>
+<h2>📃 Uploaded Files:</h2>
+<ul>
+    {% for file in files %}
+    <li>{{ file }} → <a href="{{ url_for('view_file', filename=file) }}">Extract Data</a></li>
+    {% endfor %}
+</ul>
+<a href="{{ url_for('index') }}">← Back to Upload</a>
+</body>
+</html>
