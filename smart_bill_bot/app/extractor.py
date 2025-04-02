@@ -31,23 +31,19 @@ def extract_invoice_details(text):
 
     lines = text.strip().splitlines()
 
-    # ✅ 1. Try extracting from www.vendor.com
-    vendor_match = re.search(r"www\.(\w+)\.com", text, re.IGNORECASE)
-    if vendor_match:
-        extracted_data["vendor"] = vendor_match.group(1).capitalize()
+    # ✅ 1. Legal suffix or known law firm pattern
+    firm_match = re.search(r"([A-Z][A-Za-z,&\s]+(?:LLP|LLC|P\.?C\.?|Inc\.?|Group))", text, re.IGNORECASE)
+    if firm_match:
+        extracted_data["vendor"] = firm_match.group(1).strip()
 
-    # ✅ 2. Extract from "Remit To:" block
+    # ✅ 2. Remit To fallback
     elif remit_block := re.search(r"Remit To:\s*([\s\S]*?)(?=\nPh\.|\nFax|\nEmail|\nWebsite|\n)", text, re.IGNORECASE):
         remit_lines = remit_block.group(1).strip().splitlines()
         if remit_lines:
             extracted_data["vendor"] = remit_lines[0].strip()
             extracted_data["vendor_address"] = remit_block.group(1).strip().replace("\n", " ")
 
-    # ✅ 3. Legal suffix match: P.C., LLC, Inc, Corp
-    elif legal_match := re.search(r"(?i)([A-Z][A-Z\s&]+(P\.?C\.?|LLC|INC|CORP))", text):
-        extracted_data["vendor"] = legal_match.group(1).title()
-
-    # ✅ 4. Fallback: top uppercase lines (exclude "ATTORNEYS AT LAW" etc.)
+    # ✅ 3. Uppercase fallback
     if extracted_data["vendor"] == "Unknown":
         for line in lines[:10]:
             if (
@@ -59,38 +55,53 @@ def extract_invoice_details(text):
                 extracted_data["vendor"] = line.strip().title()
                 break
 
-    # ✅ Date detection
-    date_patterns = [
-        r"(?:Invoice Date|Date Issued|Date)[\s:]*([0-9]{1,2}/[0-9]{1,2}/[0-9]{4})",
-        r"(?:Invoice Date|Date Issued|Date)[\s:]*([A-Za-z]+ \d{1,2}, \d{4})"
-    ]
-    for pattern in date_patterns:
-        date_match = re.search(pattern, text, re.IGNORECASE)
-        if date_match:
-            date_str = date_match.group(1).strip()
-            try:
-                extracted_data["date"] = datetime.strptime(date_str, "%B %d, %Y").strftime("%m/%d/%Y")
-            except ValueError:
-                extracted_data["date"] = date_str
+    # ✅ 4. Special case: Match Matter # table row
+    table_match = re.search(
+        r"Matter\s+#\s+Date\s+Invoice\s+#\s+Amount\s*\n(\S+)\s+(\d{1,2}/\d{1,2}/\d{4})\s+(\d+)\s+\$?([\d,]+\.\d{2})",
+        text,
+        re.IGNORECASE
+    )
+    if table_match:
+        extracted_data["invoice_number"] = table_match.group(3).strip()
+        extracted_data["date"] = table_match.group(2).strip()
+        extracted_data["amount"] = table_match.group(4).strip()
 
-    # ✅ Invoice Number
-    invoice_match = re.search(r"(?:Invoice\s*(#|No\.?|Number)?[\s:]*)\s*(\d{4,})", text, re.IGNORECASE)
-    if invoice_match:
-        extracted_data["invoice_number"] = invoice_match.group(2).strip()
+    # ✅ 5. Generic date fallback
+    if extracted_data["date"] == "Unknown":
+        date_patterns = [
+            r"(?:Invoice Date|Date Issued|Date)[\s:]*([0-9]{1,2}/[0-9]{1,2}/[0-9]{4})",
+            r"(?:Invoice Date|Date Issued|Date)[\s:]*([A-Za-z]+ \d{1,2}, \d{4})"
+        ]
+        for pattern in date_patterns:
+            date_match = re.search(pattern, text, re.IGNORECASE)
+            if date_match:
+                date_str = date_match.group(1).strip()
+                try:
+                    extracted_data["date"] = datetime.strptime(date_str, "%B %d, %Y").strftime("%m/%d/%Y")
+                except ValueError:
+                    extracted_data["date"] = date_str
+                break
 
-    # ✅ Amount Detection
-    amount_order = [
-        r"Balance Due[\s:]*\$?([\d,]+\.\d{2})",
-        r"Total Due[\s:]*\$?([\d,]+\.\d{2})",
-        r"Amount Due[\s:]*\$?([\d,]+\.\d{2})",
-        r"Total[\s:]*\$?([\d,]+\.\d{2})",
-        r"Grand Total[\s:]*\$?([\d,]+\.\d{2})"
-    ]
-    for pattern in amount_order:
-        amount_match = re.search(pattern, text, re.IGNORECASE)
-        if amount_match:
-            extracted_data["amount"] = amount_match.group(1).strip()
-            break
+    # ✅ 6. Invoice number fallback
+    if extracted_data["invoice_number"] == "Unknown":
+        invoice_match = re.search(r"(?:Invoice\s*(#|No\.?|Number)?[\s:]*)\s*(\d{4,})", text, re.IGNORECASE)
+        if invoice_match:
+            extracted_data["invoice_number"] = invoice_match.group(2).strip()
+
+    # ✅ 7. Amount fallback
+    if extracted_data["amount"] == "Unknown":
+        amount_order = [
+            r"Balance Due[\s:]*\$?([\d,]+\.\d{2})",
+            r"Total Due[\s:]*\$?([\d,]+\.\d{2})",
+            r"Amount Due[\s:]*\$?([\d,]+\.\d{2})",
+            r"Total[\s:]*\$?([\d,]+\.\d{2})",
+            r"Grand Total[\s:]*\$?([\d,]+\.\d{2})"
+        ]
+        for pattern in amount_order:
+            amount_match = re.search(pattern, text, re.IGNORECASE)
+            if amount_match:
+                extracted_data["amount"] = amount_match.group(1).strip()
+                break
 
     return extracted_data
 
