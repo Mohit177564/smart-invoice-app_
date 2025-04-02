@@ -87,8 +87,11 @@ if uploaded_files:
                     pix = page.get_pixmap(dpi=150)
                     img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
                 else:
-                    img = Image.open(temp_file_path)
-                st.image(img, use_column_width=True)
+                    doc = fitz.open(temp_file_path)
+                    page = doc.load_page(0)  # first page
+                    pix = page.get_pixmap(dpi=150)
+                    img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+                    st.image(img, use_column_width=True)
 
             # Extraction
             with col2:
