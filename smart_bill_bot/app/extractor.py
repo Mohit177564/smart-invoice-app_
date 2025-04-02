@@ -1,18 +1,10 @@
 import os
 import pytesseract
 import pdf2image
-import pandas as pd
-from flask import Flask, render_template, request, jsonify, send_file
 from PIL import Image
 import re
 from datetime import datetime
 import cv2
-
-app = Flask(__name__)
-UPLOAD_FOLDER = "uploads"
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-
-saved_invoices = []
 
 def extract_text_from_pdf(pdf_path):
     images = pdf2image.convert_from_path(pdf_path)
@@ -39,18 +31,15 @@ def extract_invoice_details(text):
 
     lines = text.strip().splitlines()
 
-    # Vendor from top few lines
     for line in lines[:6]:
         if line.strip() and line.strip().isupper() and len(line.strip().split()) <= 6:
             extracted_data["vendor"] = line.strip().title()
             break
 
-    # Vendor Address
     remit_to_match = re.search(r"Remit To:\s*([\s\S]*?)(?=\nPh\.|\nFax|\nEmail|\nWebsite)", text, re.IGNORECASE)
     if remit_to_match:
         extracted_data["vendor_address"] = remit_to_match.group(1).strip().replace("\n", " ")
 
-    # Date
     date_patterns = [
         r"(?:Invoice Date|Date Issued|Date)[\s:]*([0-9]{1,2}/[0-9]{1,2}/[0-9]{4})",
         r"(?:Invoice Date|Date Issued|Date)[\s:]*([A-Za-z]+ \d{1,2}, \d{4})"
@@ -64,12 +53,10 @@ def extract_invoice_details(text):
             except ValueError:
                 extracted_data["date"] = date_str
 
-    # Invoice Number
     invoice_match = re.search(r"(?:Invoice\s*(#|No\.?|Number)?[\s:]*)\s*(\d{4,})", text, re.IGNORECASE)
     if invoice_match:
         extracted_data["invoice_number"] = invoice_match.group(2).strip()
 
-    # Amount (priority based)
     amount_order = [
         r"Balance Due[\s:]*\$?([\d,]+\.\d{2})",
         r"Total Due[\s:]*\$?([\d,]+\.\d{2})",
@@ -83,79 +70,13 @@ def extract_invoice_details(text):
             extracted_data["amount"] = amount_match.group(1).strip()
             break
 
-    # Table fallback
-    table_row_match = re.search(
-        r"INVOICE\s*#\s+DATE\s+TOTAL\s+DUE[\s\S]{0,50}?(\d{4,})\s+(\d{1,2}/\d{1,2}/\d{4})\s+\$?([\d,]+\.\d{2})",
-        text,
-        re.IGNORECASE
-    )
-    if table_row_match:
-        if extracted_data["invoice_number"] == "Unknown":
-            extracted_data["invoice_number"] = table_row_match.group(1).strip()
-        if extracted_data["date"] == "Unknown":
-            extracted_data["date"] = table_row_match.group(2).strip()
-        if extracted_data["amount"] == "Unknown":
-            extracted_data["amount"] = table_row_match.group(3).strip()
-
     return extracted_data
 
-# ✅ Helper function for Streamlit
 def extract_fields(file_path):
     if file_path.lower().endswith(".pdf"):
         text = extract_text_from_pdf(file_path)
     else:
         text = extract_text_from_image(file_path)
 
-    return extract_invoice_details(text)
-
-# Flask routes (keep these for web use)
-@app.route('/')
-def index():
-    return render_template('index.html')
-
-@app.route('/extract', methods=['POST'])
-def extract_invoice_data():
-    if 'file' not in request.files:
-        return jsonify({"error": "No file uploaded"}), 400
-
-    file = request.files['file']
-    file_path = os.path.join(UPLOAD_FOLDER, file.filename)
-    file.save(file_path)
-
-    if file.filename.lower().endswith(".pdf"):
-        text = extract_text_from_pdf(file_path)
-    else:
-        text = extract_text_from_image(file_path)
-
-    print("\n📝 OCR Extracted Text:\n", text)
     extracted_data = extract_invoice_details(text)
-    extracted_data["text"] = text
-    return jsonify(extracted_data)
-
-@app.route('/save', methods=['POST'])
-def save_invoice():
-    global saved_invoices
-    data = request.json
-    saved_invoices.append(data)
-    return jsonify({"message": "Invoice saved!", "data": saved_invoices})
-
-@app.route('/get_saved', methods=['GET'])
-def get_saved_invoices():
-    return jsonify(saved_invoices)
-
-@app.route('/delete', methods=['POST'])
-def delete_invoice():
-    global saved_invoices
-    invoice_number = request.json.get("invoice_number")
-    saved_invoices = [inv for inv in saved_invoices if inv["invoice_number"] != invoice_number]
-    return jsonify({"message": "Invoice deleted!", "data": saved_invoices})
-
-@app.route('/download', methods=['GET'])
-def download_excel():
-    df = pd.DataFrame(saved_invoices)
-    excel_path = "invoices.xlsx"
-    df.to_excel(excel_path, index=False)
-    return send_file(excel_path, as_attachment=True)
-
-if __name__ == '__main__':
-    app.run(debug=True)
+    return extracted_data
