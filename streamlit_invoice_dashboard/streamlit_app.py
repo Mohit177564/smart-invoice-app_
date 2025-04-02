@@ -7,7 +7,6 @@ import tempfile
 from utils.extractor import extract_invoice_data
 from io import BytesIO
 
-# Export DataFrame to Excel bytes
 def export_excel_file(dataframe):
     output = BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
@@ -24,7 +23,6 @@ if "invoice_queue" not in st.session_state:
 if "extracted_data" not in st.session_state:
     st.session_state.extracted_data = {}
 
-# Sidebar Upload
 st.sidebar.header("📂 Upload Invoices")
 uploaded_files = st.sidebar.file_uploader(
     "Upload PDFs or Images", 
@@ -32,7 +30,6 @@ uploaded_files = st.sidebar.file_uploader(
     accept_multiple_files=True
 )
 
-# Sidebar Save/Load
 if st.sidebar.button("💾 Save Queue"):
     df = pd.DataFrame(st.session_state.invoice_queue)
     df.to_csv("saved_queue.csv", index=False)
@@ -50,10 +47,9 @@ if st.sidebar.button("📂 Load Queue"):
     else:
         st.sidebar.error("No saved queue found!")
 
-# Sidebar Batch Processing
 if uploaded_files and st.sidebar.button("🧠 Process All to Queue"):
     for file in uploaded_files:
-        ext = os.path.splitext(file.name)[-1]
+        ext = os.path.splitext(file.name)[-1].lower()
         with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as temp_file:
             temp_file.write(file.read())
             temp_path = temp_file.name
@@ -66,34 +62,25 @@ if uploaded_files and st.sidebar.button("🧠 Process All to Queue"):
             st.warning(f"Failed to process {file.name}: {e}")
     st.sidebar.success("All files processed and added to queue.")
 
-# Main interface
 if uploaded_files:
     selected_file = st.selectbox("Choose a file to preview & extract", [f.name for f in uploaded_files])
     for file in uploaded_files:
         if file.name == selected_file:
-            ext = os.path.splitext(file.name)[-1]
+            ext = os.path.splitext(file.name)[-1].lower()
             with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as temp_file:
                 temp_file.write(file.read())
                 temp_file_path = temp_file.name
 
             col1, col2 = st.columns([1, 1])
 
-            # Preview
             with col1:
                 st.subheader("📑 Invoice Preview")
-                if ext == ".pdf":
-                    doc = fitz.open(temp_file_path)
-                    page = doc.load_page(0)
-                    pix = page.get_pixmap(dpi=150)
-                    img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-                else:
-                    doc = fitz.open(temp_file_path)
-                    page = doc.load_page(0)  # first page
-                    pix = page.get_pixmap(dpi=150)
-                    img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-                    st.image(img, use_column_width=True)
+                doc = fitz.open(temp_file_path)
+                page = doc.load_page(0)
+                pix = page.get_pixmap(dpi=150)
+                img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+                st.image(img, use_column_width=True)
 
-            # Extraction
             with col2:
                 st.subheader("🧠 Extracted Data")
                 if st.button("Extract Data"):
@@ -109,7 +96,6 @@ if uploaded_files:
                         st.success("Added to queue.")
                         st.session_state.extracted_data = {}
 
-# Queue management
 if st.session_state.invoice_queue:
     st.subheader("📝 Queued Invoices")
     df = pd.DataFrame(st.session_state.invoice_queue)
@@ -124,6 +110,5 @@ if st.session_state.invoice_queue:
         st.success(f"Removed invoice {remove_option} and updated saved queue.")
 
     st.dataframe(df)
-
     excel_data = export_excel_file(df)
     st.download_button("📥 Download All as Excel", data=excel_data, file_name="invoices.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
