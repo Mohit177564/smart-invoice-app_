@@ -31,15 +31,26 @@ def extract_invoice_details(text):
 
     lines = text.strip().splitlines()
 
-    for line in lines[:6]:
-        if line.strip() and line.strip().isupper() and len(line.strip().split()) <= 6:
-            extracted_data["vendor"] = line.strip().title()
-            break
+    # ✅ 1. Try extracting vendor from website pattern
+    vendor_match = re.search(r"www\.(\w+)\.com", text, re.IGNORECASE)
+    if vendor_match:
+        extracted_data["vendor"] = vendor_match.group(1).capitalize()
 
-    remit_to_match = re.search(r"Remit To:\s*([\s\S]*?)(?=\nPh\.|\nFax|\nEmail|\nWebsite)", text, re.IGNORECASE)
-    if remit_to_match:
-        extracted_data["vendor_address"] = remit_to_match.group(1).strip().replace("\n", " ")
+    # ✅ 2. Try extracting from "Remit To" block
+    elif remit_block := re.search(r"Remit To:\s*([\s\S]*?)(?=\nPh\.|\nFax|\nEmail|\nWebsite|\n)", text, re.IGNORECASE):
+        remit_lines = remit_block.group(1).strip().splitlines()
+        if remit_lines:
+            extracted_data["vendor"] = remit_lines[0].strip()
+            extracted_data["vendor_address"] = remit_block.group(1).strip().replace("\n", " ")
 
+    # ✅ 3. Fallback: extract from top all-uppercase lines
+    if extracted_data["vendor"] == "Unknown":
+        for line in lines[:6]:
+            if line.strip() and line.strip().isupper() and len(line.strip().split()) <= 6:
+                extracted_data["vendor"] = line.strip().title()
+                break
+
+    # ✅ Date patterns
     date_patterns = [
         r"(?:Invoice Date|Date Issued|Date)[\s:]*([0-9]{1,2}/[0-9]{1,2}/[0-9]{4})",
         r"(?:Invoice Date|Date Issued|Date)[\s:]*([A-Za-z]+ \d{1,2}, \d{4})"
@@ -53,10 +64,12 @@ def extract_invoice_details(text):
             except ValueError:
                 extracted_data["date"] = date_str
 
+    # ✅ Invoice number
     invoice_match = re.search(r"(?:Invoice\s*(#|No\.?|Number)?[\s:]*)\s*(\d{4,})", text, re.IGNORECASE)
     if invoice_match:
         extracted_data["invoice_number"] = invoice_match.group(2).strip()
 
+    # ✅ Amount detection
     amount_order = [
         r"Balance Due[\s:]*\$?([\d,]+\.\d{2})",
         r"Total Due[\s:]*\$?([\d,]+\.\d{2})",
