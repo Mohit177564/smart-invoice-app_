@@ -1,0 +1,8 @@
+streamlit
+pandas
+pillow
+PyMuPDF
+pdf2image
+pytesseract
+opencv-python
+xlsxwriter
